@@ -59,9 +59,11 @@ class PositionDetector:
             Detected Position, or None if detection fails.
         """
         if frame is None or frame.size == 0:
+            log.debug("Empty frame, skipping detection")
             return None
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        log.debug("Converted frame to grayscale (%dx%d)", gray.shape[1], gray.shape[0])
 
         # Try template matching against all loaded region templates
         best_match = self._match_templates(gray)
@@ -78,6 +80,7 @@ class PositionDetector:
             Best matching Position above the confidence threshold, or None.
         """
         if not self._templates:
+            log.info("No templates loaded, skipping template matching")
             return None
 
         best_score = 0.0
@@ -89,17 +92,25 @@ class PositionDetector:
                 template.shape[0] > gray.shape[0]
                 or template.shape[1] > gray.shape[1]
             ):
+                log.debug("Template %r too large for frame, skipping", name)
                 continue
 
             result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
             _, max_val, _, _ = cv2.minMaxLoc(result)
+            log.debug("Template %r score: %.3f", name, max_val)
 
             if max_val > best_score:
                 best_score = max_val
                 best_name = name
 
+        log.info(
+            "Best template match: %r with score %.1f%% (threshold %.1f%%)",
+            best_name or "(none)",
+            best_score * 100,
+            self.config.match_confidence_threshold * 100,
+        )
+
         if best_score >= self.config.match_confidence_threshold and best_name:
-            # Check if the template name matches a known region
             if best_name in REGION_BY_NAME:
                 return Position(
                     region_name=best_name,
@@ -107,6 +118,7 @@ class PositionDetector:
                     grid_y=0.0,
                     confidence=best_score,
                 )
+            log.info("Best match %r not in known regions, discarding", best_name)
 
         return None
 
@@ -119,9 +131,10 @@ class PositionDetector:
         try:
             import pytesseract
         except ImportError:
-            log.debug("pytesseract not available for OCR fallback")
+            log.info("pytesseract not available, skipping OCR fallback")
             return None
 
+        log.info("Attempting OCR fallback")
         try:
             # Pre-process for better OCR
             _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
@@ -129,17 +142,23 @@ class PositionDetector:
             text = text.strip()
 
             if not text:
+                log.info("OCR returned no text")
                 return None
+
+            log.info("OCR text: %r", text)
 
             # Try to parse region name from OCR output
             for region_name in REGION_BY_NAME:
                 if region_name.lower() in text.lower():
+                    log.info("OCR matched region: %s", region_name)
                     return Position(
                         region_name=region_name,
                         grid_x=0.0,
                         grid_y=0.0,
                         confidence=0.5,
                     )
+
+            log.info("OCR text did not match any known region")
         except Exception:
             log.debug("OCR failed", exc_info=True)
 

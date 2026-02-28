@@ -50,8 +50,10 @@ class ScreenCapture:
         """
         region = self.find_game_window()
         if region is None:
+            log.debug("Window %r not found", self.config.window_title)
             return None
 
+        log.debug("Window geometry: %s", region)
         try:
             shot = self._sct.grab(region)
             img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
