@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
+    QComboBox,
     QLabel,
-    QLineEdit,
     QMainWindow,
+    QPushButton,
     QSpinBox,
     QStatusBar,
     QToolBar,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
 
 from foxholed.config import Config
 from foxholed.ui.map_widget import MapWidget
+from foxholed.window_utils import list_windows
 
 
 class MapWindow(QMainWindow):
@@ -38,11 +40,18 @@ class MapWindow(QMainWindow):
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
 
-        toolbar.addWidget(QLabel(" Window title: "))
-        self._title_edit = QLineEdit(config.window_title)
-        self._title_edit.setMaximumWidth(200)
-        self._title_edit.textChanged.connect(self._on_title_changed)
-        toolbar.addWidget(self._title_edit)
+        toolbar.addWidget(QLabel(" Window: "))
+        self._title_combo = QComboBox()
+        self._title_combo.setEditable(True)
+        self._title_combo.setMaximumWidth(300)
+        self._title_combo.setMinimumWidth(200)
+        self._populate_windows()
+        self._title_combo.currentTextChanged.connect(self._on_title_changed)
+        toolbar.addWidget(self._title_combo)
+
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.clicked.connect(self._populate_windows)
+        toolbar.addWidget(self._refresh_btn)
 
         toolbar.addSeparator()
 
@@ -64,6 +73,21 @@ class MapWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._confidence_label)
 
         self.set_status("Waiting for game...")
+
+    def _populate_windows(self) -> None:
+        """Refresh the window combo box with currently open windows."""
+        current = self._title_combo.currentText() or self.config.window_title
+        self._title_combo.blockSignals(True)
+        self._title_combo.clear()
+        titles = list_windows()
+        self._title_combo.addItems(titles)
+        # Restore / pre-select the configured title
+        idx = self._title_combo.findText(current)
+        if idx >= 0:
+            self._title_combo.setCurrentIndex(idx)
+        else:
+            self._title_combo.setEditText(current)
+        self._title_combo.blockSignals(False)
 
     def _on_title_changed(self, text: str) -> None:
         self.config.window_title = text
