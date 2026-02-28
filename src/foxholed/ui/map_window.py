@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMainWindow, QStatusBar, QWidget
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QSpinBox,
+    QStatusBar,
+    QToolBar,
+    QWidget,
+)
 
 from foxholed.config import Config
 from foxholed.ui.map_widget import MapWidget
@@ -11,6 +19,8 @@ from foxholed.ui.map_widget import MapWidget
 
 class MapWindow(QMainWindow):
     """Top-level window for the Foxholed map viewer."""
+
+    capture_interval_changed = pyqtSignal(int)
 
     def __init__(self, config: Config, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -23,6 +33,27 @@ class MapWindow(QMainWindow):
         self.map_widget = MapWidget(hex_size=config.hex_size, parent=self)
         self.setCentralWidget(self.map_widget)
 
+        # Settings toolbar
+        toolbar = QToolBar("Settings", self)
+        toolbar.setMovable(False)
+        self.addToolBar(toolbar)
+
+        toolbar.addWidget(QLabel(" Window title: "))
+        self._title_edit = QLineEdit(config.window_title)
+        self._title_edit.setMaximumWidth(200)
+        self._title_edit.textChanged.connect(self._on_title_changed)
+        toolbar.addWidget(self._title_edit)
+
+        toolbar.addSeparator()
+
+        toolbar.addWidget(QLabel(" Interval (ms): "))
+        self._interval_spin = QSpinBox()
+        self._interval_spin.setRange(100, 10000)
+        self._interval_spin.setSingleStep(100)
+        self._interval_spin.setValue(config.capture_interval_ms)
+        self._interval_spin.valueChanged.connect(self.capture_interval_changed)
+        toolbar.addWidget(self._interval_spin)
+
         # Status bar
         self._status_bar = QStatusBar(self)
         self.setStatusBar(self._status_bar)
@@ -33,6 +64,9 @@ class MapWindow(QMainWindow):
         self._status_bar.addPermanentWidget(self._confidence_label)
 
         self.set_status("Waiting for game...")
+
+    def _on_title_changed(self, text: str) -> None:
+        self.config.window_title = text
 
     def set_status(self, text: str) -> None:
         """Update the position text in the status bar."""

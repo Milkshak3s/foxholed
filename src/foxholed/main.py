@@ -38,7 +38,7 @@ def main() -> None:
     def tick() -> None:
         frame = capture.capture_screen()
         if frame is None:
-            window.set_status("No game window found")
+            window.set_status(f"No window found matching \"{config.window_title}\"")
             window.set_confidence(None)
             window.map_widget.update_position(None)
             return
@@ -61,6 +61,8 @@ def main() -> None:
     timer = QTimer()
     timer.timeout.connect(tick)
     timer.start(config.capture_interval_ms)
+
+    window.capture_interval_changed.connect(timer.setInterval)
 
     sys.exit(app.exec())
 
