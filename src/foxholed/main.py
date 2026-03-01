@@ -5,15 +5,19 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+import threading
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
 from foxholed.config import Config
 from foxholed.detection_worker import DetectionWorker
 from foxholed.detector import Position
+from foxholed.region_notifier import RegionNotifier
 from foxholed.settings import load_settings, save_settings
 from foxholed.ui.map_window import MapWindow
 from foxholed.ui.template_dialog import TemplateCaptureDialog
+from foxholed.war_api import fetch_faction_control
 
 log = logging.getLogger(__name__)
 
@@ -50,9 +54,38 @@ def main() -> None:
     window.show()
 
     worker = DetectionWorker(config)
+    notifier = RegionNotifier()
 
     # Update template count on startup
     window.set_template_count(worker.detector.template_count)
+
+    # ------------------------------------------------------------------
+    # War API polling (runs in background thread, updates UI via signal)
+    # ------------------------------------------------------------------
+
+    def _poll_war_api() -> None:
+        try:
+            control = fetch_faction_control()
+            if control:
+                # Schedule UI update on the main thread
+                QTimer.singleShot(0, lambda: window.map_widget.set_faction_control(control))
+                log.info("War API: updated faction control for %d regions", len(control))
+        except Exception:
+            log.debug("War API poll failed", exc_info=True)
+
+    def _start_api_poll() -> None:
+        threading.Thread(target=_poll_war_api, daemon=True).start()
+
+    # Poll every 60 seconds
+    api_timer = QTimer()
+    api_timer.timeout.connect(_start_api_poll)
+    api_timer.start(60_000)
+    # Initial poll
+    _start_api_poll()
+
+    # ------------------------------------------------------------------
+    # Detection signals
+    # ------------------------------------------------------------------
 
     def on_position(position: Position | None) -> None:
         if position is not None:
@@ -63,6 +96,7 @@ def main() -> None:
                 confidence=position.confidence,
                 method=position.method,
             )
+            notifier.update(position.region_name)
         else:
             window.set_confidence(None)
             window.map_widget.update_position(None)

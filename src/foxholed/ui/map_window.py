@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from foxholed.config import Config
 from foxholed.ui.map_widget import MapWidget
+from foxholed.ui.overlay_widget import OverlayWidget
 from foxholed.window_utils import list_windows
 
 
@@ -88,6 +89,13 @@ class MapWindow(QMainWindow):
         self._center_btn.clicked.connect(self._center_on_player)
         toolbar.addWidget(self._center_btn)
 
+        toolbar.addSeparator()
+
+        # Compact overlay toggle
+        self._overlay_checkbox = QCheckBox("Overlay")
+        self._overlay_checkbox.toggled.connect(self._on_overlay_toggled)
+        toolbar.addWidget(self._overlay_checkbox)
+
         # Status bar
         self._status_bar = QStatusBar(self)
         self.setStatusBar(self._status_bar)
@@ -125,6 +133,9 @@ class MapWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key.Key_Up), self, self.map_widget.pan_up)
         QShortcut(QKeySequence(Qt.Key.Key_Down), self, self.map_widget.pan_down)
 
+        # Overlay widget (lazy-created)
+        self._overlay: OverlayWidget | None = None
+
         self.set_status("Waiting for game...")
 
     # ------------------------------------------------------------------
@@ -153,6 +164,19 @@ class MapWindow(QMainWindow):
 
     def _center_on_player(self) -> None:
         self.map_widget.center_on_player()
+
+    # ------------------------------------------------------------------
+    # Compact overlay
+    # ------------------------------------------------------------------
+
+    def _on_overlay_toggled(self, checked: bool) -> None:
+        if checked:
+            if self._overlay is None:
+                self._overlay = OverlayWidget()
+            self._overlay.show()
+        else:
+            if self._overlay is not None:
+                self._overlay.hide()
 
     # ------------------------------------------------------------------
     # Status indicator dot
@@ -238,6 +262,8 @@ class MapWindow(QMainWindow):
     ) -> None:
         """Update both the map marker and the status bar."""
         self.map_widget.update_position(region_name, grid_x, grid_y)
+        if self._overlay is not None and self._overlay.isVisible():
+            self._overlay.update_position(region_name, grid_x, grid_y)
 
         if region_name is None:
             self.set_status("Position: unknown")
