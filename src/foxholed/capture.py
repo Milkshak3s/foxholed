@@ -22,8 +22,18 @@ class ScreenCapture:
 
     def __init__(self, config: Config) -> None:
         self.config = config
-        self._sct = mss.mss()
+        self._sct: mss.mss | None = None
         self._window_geo: dict | None = None
+
+    def _get_sct(self) -> mss.mss:
+        """Lazily create the mss instance on the calling thread.
+
+        mss uses thread-local handles (srcdc/memdc on Windows), so the
+        instance must be created on the same thread that calls grab().
+        """
+        if self._sct is None:
+            self._sct = mss.mss()
+        return self._sct
 
     def find_game_window(self) -> dict | None:
         """Find the Foxhole game window by its title.
@@ -55,7 +65,7 @@ class ScreenCapture:
 
         log.debug("Window geometry: %s", region)
         try:
-            shot = self._sct.grab(region)
+            shot = self._get_sct().grab(region)
             img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
             return np.array(img)[:, :, ::-1]  # RGB -> BGR for OpenCV
         except Exception:
