@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 class DetectionWorker(QThread):
-    """Runs capture -> crop -> detect in a background thread."""
+    """Runs capture -> detect in a background thread."""
 
     position_detected = pyqtSignal(object)  # Position | None
     status_changed = pyqtSignal(str)
@@ -78,14 +78,12 @@ class DetectionWorker(QThread):
             self.position_detected.emit(None)
             return
 
-        minimap = self._capture.crop_minimap(frame)
-
         # If a frame was requested for template capture, emit it
         if self._frame_requested:
             self._frame_requested = False
-            self.frame_captured.emit(minimap.copy())
+            self.frame_captured.emit(frame.copy())
 
-        position = self._detector.detect(minimap)
+        position = self._detector.detect(frame)
         self.position_detected.emit(position)
 
         if position is None:
