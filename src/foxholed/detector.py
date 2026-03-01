@@ -192,7 +192,7 @@ class PositionDetector:
         best_name = ""
         best_loc: tuple[int, int] = (0, 0)
         best_template_shape: tuple[int, int] = (0, 0)
-        scales = [0.75, 0.85, 1.0, 1.15, 1.25]
+        scales = [0.5, 0.65, 0.75, 0.85, 1.0, 1.15, 1.25]
 
         for name, template in self._templates.items():
             for scale in scales:

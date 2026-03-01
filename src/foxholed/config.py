@@ -37,4 +37,4 @@ class Config:
     triangle_max_area: int = 2000
 
     # Radius (pixels) to crop around the detected marker for template matching
-    crop_radius: int = 200
+    crop_radius: int = 400
