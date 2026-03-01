@@ -23,6 +23,7 @@ class Position:
     grid_x: float
     grid_y: float
     confidence: float
+    method: str = "template"
 
 
 class PositionDetector:
@@ -31,6 +32,16 @@ class PositionDetector:
     def __init__(self, config: Config) -> None:
         self.config = config
         self._templates: dict[str, np.ndarray] = {}
+        self._load_templates()
+
+    @property
+    def template_count(self) -> int:
+        """Number of loaded templates."""
+        return len(self._templates)
+
+    def reload_templates(self) -> None:
+        """Reload templates from disk."""
+        self._templates.clear()
         self._load_templates()
 
     def _load_templates(self) -> None:
@@ -85,6 +96,8 @@ class PositionDetector:
 
         best_score = 0.0
         best_name = ""
+        best_loc: tuple[int, int] = (0, 0)
+        best_template_shape: tuple[int, int] = (0, 0)
 
         for name, template in self._templates.items():
             # Skip if template is larger than the frame
@@ -96,12 +109,14 @@ class PositionDetector:
                 continue
 
             result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, _ = cv2.minMaxLoc(result)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
             log.debug("Template %r score: %.3f", name, max_val)
 
             if max_val > best_score:
                 best_score = max_val
                 best_name = name
+                best_loc = max_loc
+                best_template_shape = (template.shape[1], template.shape[0])
 
         log.info(
             "Best template match: %r with score %.1f%% (threshold %.1f%%)",
@@ -112,11 +127,16 @@ class PositionDetector:
 
         if best_score >= self.config.match_confidence_threshold and best_name:
             if best_name in REGION_BY_NAME:
+                frame_h, frame_w = gray.shape[:2]
+                template_w, template_h = best_template_shape
+                grid_x = (best_loc[0] + template_w / 2) / frame_w - 0.5
+                grid_y = (best_loc[1] + template_h / 2) / frame_h - 0.5
                 return Position(
                     region_name=best_name,
-                    grid_x=0.0,
-                    grid_y=0.0,
+                    grid_x=grid_x,
+                    grid_y=grid_y,
                     confidence=best_score,
+                    method="template",
                 )
             log.info("Best match %r not in known regions, discarding", best_name)
 
@@ -156,6 +176,7 @@ class PositionDetector:
                         grid_x=0.0,
                         grid_y=0.0,
                         confidence=0.5,
+                        method="ocr",
                     )
 
             log.info("OCR text did not match any known region")

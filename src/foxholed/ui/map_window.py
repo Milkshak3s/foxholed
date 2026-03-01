@@ -23,6 +23,7 @@ class MapWindow(QMainWindow):
     """Top-level window for the Foxholed map viewer."""
 
     capture_interval_changed = pyqtSignal(int)
+    capture_template_requested = pyqtSignal()
 
     def __init__(self, config: Config, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -63,13 +64,21 @@ class MapWindow(QMainWindow):
         self._interval_spin.valueChanged.connect(self.capture_interval_changed)
         toolbar.addWidget(self._interval_spin)
 
+        toolbar.addSeparator()
+
+        self._capture_btn = QPushButton("Capture Template")
+        self._capture_btn.clicked.connect(self.capture_template_requested)
+        toolbar.addWidget(self._capture_btn)
+
         # Status bar
         self._status_bar = QStatusBar(self)
         self.setStatusBar(self._status_bar)
 
         self._position_label = QLabel("Position: unknown")
         self._confidence_label = QLabel("Confidence: -")
+        self._template_count_label = QLabel("Templates: 0")
         self._status_bar.addWidget(self._position_label, stretch=1)
+        self._status_bar.addPermanentWidget(self._template_count_label)
         self._status_bar.addPermanentWidget(self._confidence_label)
 
         self.set_status("Waiting for game...")
@@ -103,12 +112,21 @@ class MapWindow(QMainWindow):
         else:
             self._confidence_label.setText(f"Confidence: {value:.0%}")
 
+    def set_template_count(self, count: int) -> None:
+        """Update the template count display in the status bar."""
+        self._template_count_label.setText(f"Templates: {count}")
+        if count == 0:
+            self._template_count_label.setStyleSheet("color: red;")
+        else:
+            self._template_count_label.setStyleSheet("")
+
     def update_position(
         self,
         region_name: str | None,
         grid_x: float | None = None,
         grid_y: float | None = None,
         confidence: float | None = None,
+        method: str | None = None,
     ) -> None:
         """Update both the map marker and the status bar."""
         self.map_widget.update_position(region_name, grid_x, grid_y)
@@ -116,7 +134,8 @@ class MapWindow(QMainWindow):
         if region_name is None:
             self.set_status("Position: unknown")
         else:
-            parts = [f"Region: {region_name}"]
+            method_label = (method or "template").upper()
+            parts = [f"{method_label}: {region_name}"]
             if grid_x is not None and grid_y is not None:
                 parts.append(f"Grid: ({grid_x:.2f}, {grid_y:.2f})")
             self.set_status(" | ".join(parts))

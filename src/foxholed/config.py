@@ -31,7 +31,9 @@ class Config:
     match_confidence_threshold: float = 0.7
 
     # Path to template images directory
-    templates_dir: Path = Path("assets/templates")
+    templates_dir: Path = field(
+        default_factory=lambda: Path(__file__).resolve().parent.parent.parent / "assets" / "templates"
+    )
 
     # Map widget settings
     hex_size: int = 50
