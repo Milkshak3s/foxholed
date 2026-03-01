@@ -122,6 +122,7 @@ def main() -> None:
         if dialog.exec():
             worker.detector.reload_templates()
             window.set_template_count(worker.detector.template_count)
+            window.region_view.clear_cache()
 
     def on_shutdown() -> None:
         save_settings(

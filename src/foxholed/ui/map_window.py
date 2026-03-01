@@ -9,6 +9,7 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDockWidget,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
 from foxholed.config import Config
 from foxholed.ui.map_widget import MapWidget
 from foxholed.ui.overlay_widget import OverlayWidget
+from foxholed.ui.region_view_widget import RegionViewWidget
 from foxholed.window_utils import list_windows
 
 
@@ -96,6 +98,14 @@ class MapWindow(QMainWindow):
         self._overlay_checkbox.toggled.connect(self._on_overlay_toggled)
         toolbar.addWidget(self._overlay_checkbox)
 
+        toolbar.addSeparator()
+
+        # Region view toggle
+        self._region_view_checkbox = QCheckBox("Region View")
+        self._region_view_checkbox.setChecked(True)
+        self._region_view_checkbox.toggled.connect(self._on_region_view_toggled)
+        toolbar.addWidget(self._region_view_checkbox)
+
         # Status bar
         self._status_bar = QStatusBar(self)
         self.setStatusBar(self._status_bar)
@@ -135,6 +145,15 @@ class MapWindow(QMainWindow):
 
         # Overlay widget (lazy-created)
         self._overlay: OverlayWidget | None = None
+
+        # Region view dock (right panel)
+        self.region_view = RegionViewWidget(config.templates_dir, parent=self)
+        self._region_dock = QDockWidget("Region View", self)
+        self._region_dock.setWidget(self.region_view)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._region_dock)
+        self._region_dock.visibilityChanged.connect(
+            lambda vis: self._region_view_checkbox.setChecked(vis)
+        )
 
         self.set_status("Waiting for game...")
 
@@ -177,6 +196,13 @@ class MapWindow(QMainWindow):
         else:
             if self._overlay is not None:
                 self._overlay.hide()
+
+    # ------------------------------------------------------------------
+    # Region view dock
+    # ------------------------------------------------------------------
+
+    def _on_region_view_toggled(self, checked: bool) -> None:
+        self._region_dock.setVisible(checked)
 
     # ------------------------------------------------------------------
     # Status indicator dot
@@ -264,6 +290,7 @@ class MapWindow(QMainWindow):
         self.map_widget.update_position(region_name, grid_x, grid_y)
         if self._overlay is not None and self._overlay.isVisible():
             self._overlay.update_position(region_name, grid_x, grid_y)
+        self.region_view.update_position(region_name, grid_x or 0.0, grid_y or 0.0)
 
         if region_name is None:
             self.set_status("Position: unknown")

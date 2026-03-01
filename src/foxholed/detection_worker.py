@@ -31,6 +31,8 @@ class DetectionWorker(QThread):
         self._interval_ms = config.capture_interval_ms
         self._running = False
         self._frame_requested = False
+        self._last_region: str | None = None
+        self._last_confidence: float = 0.0
 
     @property
     def detector(self) -> PositionDetector:
@@ -85,8 +87,19 @@ class DetectionWorker(QThread):
 
         position = self._detector.detect(frame)
 
+        # Region hysteresis: require higher confidence to switch regions
+        if (
+            position is not None
+            and self._last_region is not None
+            and position.region_name != self._last_region
+            and position.confidence < self._last_confidence + 0.05
+        ):
+            position = None
+
         if position is not None:
             # Detected position — green
+            self._last_region = position.region_name
+            self._last_confidence = position.confidence
             self.position_detected.emit(position)
             self.capture_status_changed.emit("ok")
         else:
