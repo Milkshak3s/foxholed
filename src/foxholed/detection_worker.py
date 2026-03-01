@@ -20,6 +20,7 @@ class DetectionWorker(QThread):
 
     position_detected = pyqtSignal(object)  # Position | None
     status_changed = pyqtSignal(str)
+    capture_status_changed = pyqtSignal(str)  # "ok" | "no_window" | "no_match"
     frame_captured = pyqtSignal(object)  # np.ndarray (minimap)
 
     def __init__(self, config: Config, parent=None) -> None:
@@ -73,6 +74,7 @@ class DetectionWorker(QThread):
             self.status_changed.emit(
                 f'No window found matching "{self._config.window_title}"'
             )
+            self.capture_status_changed.emit("no_window")
             self.position_detected.emit(None)
             return
 
@@ -87,9 +89,12 @@ class DetectionWorker(QThread):
         self.position_detected.emit(position)
 
         if position is None:
+            self.capture_status_changed.emit("no_match")
             if self._detector.template_count == 0:
                 self.status_changed.emit(
                     "No templates loaded. Use 'Capture Template' to create one."
                 )
             else:
                 self.status_changed.emit("Position: detecting...")
+        else:
+            self.capture_status_changed.emit("ok")

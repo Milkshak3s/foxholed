@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+import time
+
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QLabel,
     QMainWindow,
@@ -70,18 +74,119 @@ class MapWindow(QMainWindow):
         self._capture_btn.clicked.connect(self.capture_template_requested)
         toolbar.addWidget(self._capture_btn)
 
+        toolbar.addSeparator()
+
+        # Always-on-top toggle
+        self._aot_checkbox = QCheckBox("Always on Top")
+        self._aot_checkbox.toggled.connect(self._on_always_on_top_toggled)
+        toolbar.addWidget(self._aot_checkbox)
+
+        toolbar.addSeparator()
+
+        # Center-on-player button
+        self._center_btn = QPushButton("Center on Player")
+        self._center_btn.clicked.connect(self._center_on_player)
+        toolbar.addWidget(self._center_btn)
+
         # Status bar
         self._status_bar = QStatusBar(self)
         self.setStatusBar(self._status_bar)
 
+        # Status indicator dot
+        self._status_dot = QLabel()
+        self._set_status_dot("red")
+
         self._position_label = QLabel("Position: unknown")
-        self._confidence_label = QLabel("Confidence: -")
+        self._last_update_label = QLabel("")
         self._template_count_label = QLabel("Templates: 0")
+        self._confidence_label = QLabel("Confidence: -")
+
+        self._status_bar.addWidget(self._status_dot)
         self._status_bar.addWidget(self._position_label, stretch=1)
+        self._status_bar.addPermanentWidget(self._last_update_label)
         self._status_bar.addPermanentWidget(self._template_count_label)
         self._status_bar.addPermanentWidget(self._confidence_label)
 
+        self._last_detection_time: float | None = None
+
+        # Timer to refresh the "last detected" display
+        self._staleness_timer = QTimer(self)
+        self._staleness_timer.timeout.connect(self._update_staleness)
+        self._staleness_timer.start(1000)
+
+        # Keyboard shortcuts
+        QShortcut(QKeySequence(Qt.Key.Key_Home), self, self._center_on_player)
+        QShortcut(QKeySequence(Qt.Key.Key_0), self, self.map_widget.reset_view)
+        QShortcut(QKeySequence(Qt.Key.Key_Plus), self, self.map_widget.zoom_in)
+        QShortcut(QKeySequence(Qt.Key.Key_Equal), self, self.map_widget.zoom_in)
+        QShortcut(QKeySequence(Qt.Key.Key_Minus), self, self.map_widget.zoom_out)
+        QShortcut(QKeySequence(Qt.Key.Key_Left), self, self.map_widget.pan_left)
+        QShortcut(QKeySequence(Qt.Key.Key_Right), self, self.map_widget.pan_right)
+        QShortcut(QKeySequence(Qt.Key.Key_Up), self, self.map_widget.pan_up)
+        QShortcut(QKeySequence(Qt.Key.Key_Down), self, self.map_widget.pan_down)
+
         self.set_status("Waiting for game...")
+
+    # ------------------------------------------------------------------
+    # Always-on-top
+    # ------------------------------------------------------------------
+
+    def _on_always_on_top_toggled(self, checked: bool) -> None:
+        flags = self.windowFlags()
+        if checked:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        else:
+            flags &= ~Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.show()  # re-show required after changing window flags
+
+    def set_always_on_top(self, checked: bool) -> None:
+        """Set the always-on-top state (e.g. from saved settings)."""
+        self._aot_checkbox.setChecked(checked)
+
+    def is_always_on_top(self) -> bool:
+        return self._aot_checkbox.isChecked()
+
+    # ------------------------------------------------------------------
+    # Center on player
+    # ------------------------------------------------------------------
+
+    def _center_on_player(self) -> None:
+        self.map_widget.center_on_player()
+
+    # ------------------------------------------------------------------
+    # Status indicator dot
+    # ------------------------------------------------------------------
+
+    def _set_status_dot(self, color: str) -> None:
+        self._status_dot.setFixedSize(14, 14)
+        self._status_dot.setStyleSheet(
+            f"background-color: {color}; border-radius: 7px; margin: 2px;"
+        )
+
+    def set_capture_status(self, status: str) -> None:
+        """Update the status dot: 'ok' (green), 'no_window' (red), 'no_match' (yellow)."""
+        colors = {"ok": "#4CAF50", "no_window": "#F44336", "no_match": "#FFC107"}
+        self._set_status_dot(colors.get(status, "#F44336"))
+
+    # ------------------------------------------------------------------
+    # Staleness / last update
+    # ------------------------------------------------------------------
+
+    def _update_staleness(self) -> None:
+        if self._last_detection_time is None:
+            self._last_update_label.setText("")
+            return
+        elapsed = time.time() - self._last_detection_time
+        if elapsed < 60:
+            self._last_update_label.setText(f"Last: {elapsed:.0f}s ago")
+        else:
+            mins = int(elapsed // 60)
+            self._last_update_label.setText(f"Last: {mins}m ago")
+
+    # ------------------------------------------------------------------
+    # Window list
+    # ------------------------------------------------------------------
 
     def _populate_windows(self) -> None:
         """Refresh the window combo box with currently open windows."""
@@ -90,7 +195,6 @@ class MapWindow(QMainWindow):
         self._title_combo.clear()
         titles = list_windows()
         self._title_combo.addItems(titles)
-        # Restore / pre-select the configured title
         idx = self._title_combo.findText(current)
         if idx >= 0:
             self._title_combo.setCurrentIndex(idx)
@@ -100,6 +204,10 @@ class MapWindow(QMainWindow):
 
     def _on_title_changed(self, text: str) -> None:
         self.config.window_title = text
+
+    # ------------------------------------------------------------------
+    # Status bar updates
+    # ------------------------------------------------------------------
 
     def set_status(self, text: str) -> None:
         """Update the position text in the status bar."""
@@ -133,7 +241,10 @@ class MapWindow(QMainWindow):
 
         if region_name is None:
             self.set_status("Position: unknown")
+            self.set_capture_status("no_match")
         else:
+            self._last_detection_time = time.time()
+            self.set_capture_status("ok")
             method_label = (method or "template").upper()
             parts = [f"{method_label}: {region_name}"]
             if grid_x is not None and grid_y is not None:
@@ -141,3 +252,15 @@ class MapWindow(QMainWindow):
             self.set_status(" | ".join(parts))
 
         self.set_confidence(confidence)
+
+    # ------------------------------------------------------------------
+    # Window geometry save/restore helpers
+    # ------------------------------------------------------------------
+
+    def get_geometry_dict(self) -> dict:
+        geo = self.geometry()
+        return {"x": geo.x(), "y": geo.y(), "width": geo.width(), "height": geo.height()}
+
+    def restore_geometry_dict(self, d: dict) -> None:
+        if all(k in d for k in ("x", "y", "width", "height")):
+            self.setGeometry(d["x"], d["y"], d["width"], d["height"])

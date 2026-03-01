@@ -98,25 +98,31 @@ class PositionDetector:
         best_name = ""
         best_loc: tuple[int, int] = (0, 0)
         best_template_shape: tuple[int, int] = (0, 0)
+        scales = [0.75, 0.85, 1.0, 1.15, 1.25]
 
         for name, template in self._templates.items():
-            # Skip if template is larger than the frame
-            if (
-                template.shape[0] > gray.shape[0]
-                or template.shape[1] > gray.shape[1]
-            ):
-                log.debug("Template %r too large for frame, skipping", name)
-                continue
+            for scale in scales:
+                if scale == 1.0:
+                    scaled = template
+                else:
+                    new_w = max(1, int(template.shape[1] * scale))
+                    new_h = max(1, int(template.shape[0] * scale))
+                    scaled = cv2.resize(template, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-            result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result)
-            log.debug("Template %r score: %.3f", name, max_val)
+                # Skip if template is larger than the frame
+                if scaled.shape[0] > gray.shape[0] or scaled.shape[1] > gray.shape[1]:
+                    continue
 
-            if max_val > best_score:
-                best_score = max_val
-                best_name = name
-                best_loc = max_loc
-                best_template_shape = (template.shape[1], template.shape[0])
+                result = cv2.matchTemplate(gray, scaled, cv2.TM_CCOEFF_NORMED)
+                _, max_val, _, max_loc = cv2.minMaxLoc(result)
+
+                if max_val > best_score:
+                    best_score = max_val
+                    best_name = name
+                    best_loc = max_loc
+                    best_template_shape = (scaled.shape[1], scaled.shape[0])
+
+            log.debug("Template %r best score: %.3f", name, best_score)
 
         log.info(
             "Best template match: %r with score %.1f%% (threshold %.1f%%)",
