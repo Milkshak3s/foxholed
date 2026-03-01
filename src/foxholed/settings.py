@@ -12,7 +12,7 @@ from pathlib import Path
 
 from platformdirs import user_config_dir
 
-from foxholed.config import Config, MinimapRegion
+from foxholed.config import Config
 
 log = logging.getLogger(__name__)
 
@@ -37,15 +37,6 @@ def load_settings(config: Config) -> dict:
         config.capture_interval_ms = data["capture_interval_ms"]
     if "match_confidence_threshold" in data:
         config.match_confidence_threshold = data["match_confidence_threshold"]
-    if "minimap_region" in data:
-        mr = data["minimap_region"]
-        config.minimap_region = MinimapRegion(
-            x=mr.get("x", 0),
-            y=mr.get("y", 0),
-            width=mr.get("width", 300),
-            height=mr.get("height", 300),
-        )
-
     log.info("Loaded settings from %s", SETTINGS_FILE)
     return data
 
@@ -62,12 +53,6 @@ def save_settings(
         "window_title": config.window_title,
         "capture_interval_ms": config.capture_interval_ms,
         "match_confidence_threshold": config.match_confidence_threshold,
-        "minimap_region": {
-            "x": config.minimap_region.x,
-            "y": config.minimap_region.y,
-            "width": config.minimap_region.width,
-            "height": config.minimap_region.height,
-        },
         "always_on_top": always_on_top,
     }
 

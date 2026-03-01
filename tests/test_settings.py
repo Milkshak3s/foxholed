@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from foxholed.config import Config, MinimapRegion
+from foxholed.config import Config
 from foxholed.settings import load_settings, save_settings, reset_settings
 
 
@@ -19,7 +19,6 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
         config.window_title = "TestWindow"
         config.capture_interval_ms = 2000
         config.match_confidence_threshold = 0.8
-        config.minimap_region = MinimapRegion(x=10, y=20, width=400, height=400)
 
         save_settings(
             config,
@@ -36,8 +35,6 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
         assert config2.window_title == "TestWindow"
         assert config2.capture_interval_ms == 2000
         assert config2.match_confidence_threshold == 0.8
-        assert config2.minimap_region.x == 10
-        assert config2.minimap_region.width == 400
         assert saved["always_on_top"] is True
         assert saved["window_geometry"]["x"] == 100
         assert saved["map_view"]["zoom"] == 2.0

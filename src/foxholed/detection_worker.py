@@ -21,7 +21,7 @@ class DetectionWorker(QThread):
     position_detected = pyqtSignal(object)  # Position | None
     status_changed = pyqtSignal(str)
     capture_status_changed = pyqtSignal(str)  # "ok" | "no_window" | "no_match"
-    frame_captured = pyqtSignal(object)  # np.ndarray (minimap)
+    frame_captured = pyqtSignal(object)  # np.ndarray
 
     def __init__(self, config: Config, parent=None) -> None:
         super().__init__(parent)
@@ -84,15 +84,21 @@ class DetectionWorker(QThread):
             self.frame_captured.emit(frame.copy())
 
         position = self._detector.detect(frame)
-        self.position_detected.emit(position)
 
-        if position is None:
+        if position is not None:
+            # Detected position — green
+            self.position_detected.emit(position)
+            self.capture_status_changed.emit("ok")
+        else:
+            # Frame captured but no marker found — map is likely closed.
+            # Don't emit position_detected(None) so the last known position
+            # is preserved on the hex map.
             self.capture_status_changed.emit("no_match")
             if self._detector.template_count == 0:
                 self.status_changed.emit(
                     "No templates loaded. Use 'Capture Template' to create one."
                 )
             else:
-                self.status_changed.emit("Position: detecting...")
-        else:
-            self.capture_status_changed.emit("ok")
+                self.status_changed.emit(
+                    "Waiting for map (press M in-game)"
+                )

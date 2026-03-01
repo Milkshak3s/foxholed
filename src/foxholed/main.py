@@ -110,8 +110,15 @@ def main() -> None:
     def on_capture_template_requested() -> None:
         worker.request_frame_capture()
 
-    def on_frame_captured(minimap) -> None:
-        dialog = TemplateCaptureDialog(minimap, config.templates_dir, parent=window)
+    def on_frame_captured(frame) -> None:
+        # Try to find the triangle and crop around it
+        marker = worker.detector.find_player_triangle(frame)
+        if marker is None:
+            window.set_status("Open the map (M) before capturing")
+            return
+
+        crop, _ = worker.detector._crop_around(frame, *marker)
+        dialog = TemplateCaptureDialog(crop, config.templates_dir, parent=window)
         if dialog.exec():
             worker.detector.reload_templates()
             window.set_template_count(worker.detector.template_count)

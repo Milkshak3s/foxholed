@@ -72,14 +72,3 @@ class ScreenCapture:
             log.exception("Screen capture failed")
             return None
 
-    def crop_minimap(self, frame: np.ndarray) -> np.ndarray:
-        """Crop the minimap region from a game window capture.
-
-        Args:
-            frame: Game window image as numpy BGR array.
-
-        Returns:
-            Cropped minimap region.
-        """
-        r = self.config.minimap_region
-        return frame[r.y : r.y + r.height, r.x : r.x + r.width]

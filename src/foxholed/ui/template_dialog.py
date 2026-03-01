@@ -37,7 +37,12 @@ class TemplateCaptureDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Minimap preview
+        # Instruction
+        hint = QLabel("Open the map in-game, then click Capture Template.")
+        hint.setStyleSheet("color: gray; font-style: italic;")
+        layout.addWidget(hint)
+
+        # Preview
         self._preview = QLabel()
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._set_preview(frame)
@@ -74,7 +79,7 @@ class TemplateCaptureDialog(QDialog):
             qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
         pixmap = QPixmap.fromImage(qimg)
         scaled = pixmap.scaled(
-            300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+            400, 400, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
         )
         self._preview.setPixmap(scaled)
 

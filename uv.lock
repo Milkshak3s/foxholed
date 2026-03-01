@@ -22,7 +22,6 @@ dependencies = [
     { name = "pillow" },
     { name = "platformdirs" },
     { name = "pyqt6" },
-    { name = "pytesseract" },
 ]
 
 [package.dev-dependencies]
@@ -38,7 +37,6 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "pyqt6", specifier = ">=6.6" },
-    { name = "pytesseract", specifier = ">=0.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -338,19 +336,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/40/47/5af493a698cc520581ca1000b4ab09b8182992053ffe2478062dde5e4671/pyqt6_sip-13.11.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4284540ffccd8349763ddce3518264dde62f20556720d4061b9c895e09011ca0", size = 323919, upload-time = "2026-01-13T16:01:25.122Z" },
     { url = "https://files.pythonhosted.org/packages/b7/2d/64b26e21183a7ff180105871dd5983a8da539d8768921728268dc6d0a73d/pyqt6_sip-13.11.0-cp314-cp314-win_amd64.whl", hash = "sha256:9bd81cb351640abc803ea2fe7262b5adea28615c9b96fd103d1b6f3459937211", size = 55078, upload-time = "2026-01-13T16:01:29.853Z" },
     { url = "https://files.pythonhosted.org/packages/7e/36/23f699fa8b1c3fcc312ecd12661a1df6057d92e16d4def2399b59cf7bf22/pyqt6_sip-13.11.0-cp314-cp314-win_arm64.whl", hash = "sha256:cd95ec98f8edb15bcea832b8657809f69d758bc4151cc6fd7790c0181949e45f", size = 49465, upload-time = "2026-01-13T16:01:31.174Z" },
-]
-
-[[package]]
-name = "pytesseract"
-version = "0.3.13"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-    { name = "pillow" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/a6/7d679b83c285974a7cb94d739b461fa7e7a9b17a3abfd7bf6cbc5c2394b0/pytesseract-0.3.13.tar.gz", hash = "sha256:4bf5f880c99406f52a3cfc2633e42d9dc67615e69d8a509d74867d3baddb5db9", size = 17689, upload-time = "2024-08-16T02:33:56.762Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/33/8312d7ce74670c9d39a532b2c246a853861120486be9443eebf048043637/pytesseract-0.3.13-py3-none-any.whl", hash = "sha256:7a99c6c2ac598360693d83a416e36e0b33a67638bb9d77fdcac094a3589d4b34", size = 14705, upload-time = "2024-08-16T02:36:10.09Z" },
 ]
 
 [[package]]

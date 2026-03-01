@@ -1,4 +1,4 @@
-"""Position detection via OpenCV template matching and Tesseract OCR."""
+"""Position detection via orange triangle/arrow finding + template matching."""
 
 from __future__ import annotations
 
@@ -27,7 +27,8 @@ class Position:
 
 
 class PositionDetector:
-    """Detects the player's map position from a minimap screenshot."""
+    """Detects the player's map position by finding the orange marker
+    on the full map screen, cropping around it, and template matching."""
 
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -60,35 +61,128 @@ class PositionDetector:
 
         log.info("Loaded %d templates", len(self._templates))
 
-    def detect(self, frame: np.ndarray) -> Position | None:
-        """Attempt to detect the player's position from a minimap frame.
+    # ------------------------------------------------------------------
+    # Main detection pipeline
+    # ------------------------------------------------------------------
 
-        Args:
-            frame: Minimap image as a BGR numpy array.
+    def detect(self, frame: np.ndarray) -> Position | None:
+        """Detect the player's position from a game window frame.
+
+        Pipeline: find orange marker → crop around it → template match crop.
 
         Returns:
-            Detected Position, or None if detection fails.
+            Detected Position, or None if the marker isn't visible (map not open).
         """
         if frame is None or frame.size == 0:
             log.debug("Empty frame, skipping detection")
             return None
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        log.debug("Converted frame to grayscale (%dx%d)", gray.shape[1], gray.shape[0])
+        # Step 1: Find the orange player marker
+        marker = self.find_player_triangle(frame)
+        if marker is None:
+            log.debug("No player marker found (map likely not open)")
+            return None
 
-        # Try template matching against all loaded region templates
-        best_match = self._match_templates(gray)
-        if best_match is not None:
-            return best_match
+        cx, cy = marker
+        log.info("Player marker found at (%d, %d)", cx, cy)
 
-        # Fall back to OCR for coordinate text
-        return self._ocr_coordinates(gray)
+        # Step 2: Crop around the marker
+        crop, (marker_in_crop_x, marker_in_crop_y) = self._crop_around(frame, cx, cy)
 
-    def _match_templates(self, gray: np.ndarray) -> Position | None:
-        """Run template matching against loaded templates.
+        # Step 3: Template match the crop
+        gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        return self._match_templates(gray_crop, marker_in_crop_x, marker_in_crop_y)
+
+    # ------------------------------------------------------------------
+    # Triangle / arrow detection
+    # ------------------------------------------------------------------
+
+    def find_player_triangle(self, frame: np.ndarray) -> tuple[int, int] | None:
+        """Find the orange player marker on the map screen.
+
+        Uses HSV color filtering to isolate orange pixels, then contour
+        analysis to find a solid marker shape.
 
         Returns:
-            Best matching Position above the confidence threshold, or None.
+            (cx, cy) centroid of the marker, or None.
+        """
+        cfg = self.config
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        low = np.array([cfg.triangle_hue_low, cfg.triangle_sat_min, cfg.triangle_val_min])
+        high = np.array([cfg.triangle_hue_high, 255, 255])
+        mask = cv2.inRange(hsv, low, high)
+
+        # Morphological cleanup
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        best_candidate: tuple[int, int] | None = None
+        best_solidity = 0.0
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < cfg.triangle_min_area or area > cfg.triangle_max_area:
+                continue
+
+            # Solidity = area / convex_hull_area
+            # Solid filled shapes (arrow, triangle) have high solidity (>0.4)
+            # Thin lines, text, noise have low solidity
+            hull = cv2.convexHull(contour)
+            hull_area = cv2.contourArea(hull)
+            if hull_area == 0:
+                continue
+            solidity = area / hull_area
+
+            if solidity > 0.4 and solidity > best_solidity:
+                M = cv2.moments(contour)
+                if M["m00"] > 0:
+                    best_solidity = solidity
+                    best_candidate = (
+                        int(M["m10"] / M["m00"]),
+                        int(M["m01"] / M["m00"]),
+                    )
+
+        return best_candidate
+
+    # ------------------------------------------------------------------
+    # Crop extraction
+    # ------------------------------------------------------------------
+
+    def _crop_around(
+        self, frame: np.ndarray, cx: int, cy: int
+    ) -> tuple[np.ndarray, tuple[int, int]]:
+        """Crop a region around the marker, clamped to frame bounds.
+
+        Returns:
+            (crop, (marker_x_in_crop, marker_y_in_crop))
+        """
+        r = self.config.crop_radius
+        h, w = frame.shape[:2]
+        x1 = max(0, cx - r)
+        y1 = max(0, cy - r)
+        x2 = min(w, cx + r)
+        y2 = min(h, cy + r)
+        crop = frame[y1:y2, x1:x2]
+        return crop, (cx - x1, cy - y1)
+
+    # ------------------------------------------------------------------
+    # Template matching (on crop)
+    # ------------------------------------------------------------------
+
+    def _match_templates(
+        self,
+        gray: np.ndarray,
+        marker_x: int,
+        marker_y: int,
+    ) -> Position | None:
+        """Run multi-scale template matching on a cropped region.
+
+        Grid offsets are computed from the marker's position relative to
+        the matched template center, giving sub-region precision.
         """
         if not self._templates:
             log.info("No templates loaded, skipping template matching")
@@ -109,7 +203,6 @@ class PositionDetector:
                     new_h = max(1, int(template.shape[0] * scale))
                     scaled = cv2.resize(template, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-                # Skip if template is larger than the frame
                 if scaled.shape[0] > gray.shape[0] or scaled.shape[1] > gray.shape[1]:
                     continue
 
@@ -133,10 +226,12 @@ class PositionDetector:
 
         if best_score >= self.config.match_confidence_threshold and best_name:
             if best_name in REGION_BY_NAME:
-                frame_h, frame_w = gray.shape[:2]
                 template_w, template_h = best_template_shape
-                grid_x = (best_loc[0] + template_w / 2) / frame_w - 0.5
-                grid_y = (best_loc[1] + template_h / 2) / frame_h - 0.5
+                # Marker position relative to template center → sub-region offset
+                template_cx = best_loc[0] + template_w / 2
+                template_cy = best_loc[1] + template_h / 2
+                grid_x = (marker_x - template_cx) / template_w
+                grid_y = (marker_y - template_cy) / template_h
                 return Position(
                     region_name=best_name,
                     grid_x=grid_x,
@@ -145,48 +240,5 @@ class PositionDetector:
                     method="template",
                 )
             log.info("Best match %r not in known regions, discarding", best_name)
-
-        return None
-
-    def _ocr_coordinates(self, gray: np.ndarray) -> Position | None:
-        """Attempt to read coordinate text from the minimap via OCR.
-
-        Returns:
-            Position if coordinates are successfully parsed, otherwise None.
-        """
-        try:
-            import pytesseract
-        except ImportError:
-            log.info("pytesseract not available, skipping OCR fallback")
-            return None
-
-        log.info("Attempting OCR fallback")
-        try:
-            # Pre-process for better OCR
-            _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-            text = pytesseract.image_to_string(thresh, config="--psm 7")
-            text = text.strip()
-
-            if not text:
-                log.info("OCR returned no text")
-                return None
-
-            log.info("OCR text: %r", text)
-
-            # Try to parse region name from OCR output
-            for region_name in REGION_BY_NAME:
-                if region_name.lower() in text.lower():
-                    log.info("OCR matched region: %s", region_name)
-                    return Position(
-                        region_name=region_name,
-                        grid_x=0.0,
-                        grid_y=0.0,
-                        confidence=0.5,
-                        method="ocr",
-                    )
-
-            log.info("OCR text did not match any known region")
-        except Exception:
-            log.debug("OCR failed", exc_info=True)
 
         return None
